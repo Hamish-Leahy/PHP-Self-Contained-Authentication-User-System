@@ -3,6 +3,16 @@ declare(strict_types=1);
 
 use AuthKit\Support\Autoloader;
 use AuthKit\Database\DatabaseConnection;
+use AuthKit\Repository\PDOUserRepository;
+use AuthKit\Repository\PDOEmailTokenRepository;
+use AuthKit\Security\PasswordHasher;
+use AuthKit\Security\RandomTokenGenerator;
+use AuthKit\Support\Session\PhpSession;
+use AuthKit\Support\Clock\SystemClock;
+use AuthKit\Security\Jwt\HsJwtSigner;
+use AuthKit\Mail\PhpMailMailer;
+use AuthKit\Mail\NullMailer;
+use AuthKit\Service\AuthService;
 
 $__root = __DIR__;
 
@@ -32,6 +42,22 @@ if (PHP_SESSION_NONE === session_status()) {
 return [
     'config' => $config,
     'pdo' => $dbConnection->pdo(),
+    'services' => (function () use ($config, $dbConnection) {
+        $pdo = $dbConnection->pdo();
+        $userRepo = new PDOUserRepository($pdo);
+        $tokenRepo = new PDOEmailTokenRepository($pdo);
+        $hasher = new PasswordHasher($config['security']);
+        $session = new PhpSession();
+        $clock = new SystemClock();
+        $random = new RandomTokenGenerator();
+        $mailer = ($config['mail']['driver'] ?? 'php_mail') === 'php_mail' ? new PhpMailMailer() : new NullMailer();
+        $jwt = !empty($config['jwt']['enabled']) ? new HsJwtSigner($config['jwt']) : null;
+
+        $auth = new AuthService($userRepo, $tokenRepo, $hasher, $session, $clock, $mailer, $random, $jwt, $config);
+        return [
+            'auth' => $auth,
+        ];
+    })(),
 ];
 
 
