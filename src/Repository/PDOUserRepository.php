@@ -89,6 +89,47 @@ final class PDOUserRepository implements UserRepositoryInterface
             lockedUntil: $lockedUntil,
         );
     }
+
+    public function incrementFailedLoginAndMaybeLock(int $userId, \DateTimeImmutable $windowStart, \DateTimeImmutable $now, int $maxAttempts, string $lockDurationSpec): void
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare('SELECT failed_login_count, last_failed_login_at FROM users WHERE id = :id FOR UPDATE');
+            $stmt->execute([':id' => $userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $count = 0;
+            $last = null;
+            if ($row) {
+                $count = (int)$row['failed_login_count'];
+                $last = isset($row['last_failed_login_at']) && $row['last_failed_login_at'] !== null ? new \DateTimeImmutable($row['last_failed_login_at']) : null;
+            }
+            if ($last === null || $last < $windowStart) {
+                $count = 0; // reset window
+            }
+            $count++;
+            $lockedUntil = null;
+            if ($count >= $maxAttempts) {
+                $lockedUntil = $now->add(\DateInterval::createFromDateString($lockDurationSpec))->format('Y-m-d H:i:s');
+                $count = 0; // reset after lock
+            }
+            $stmt = $this->pdo->prepare('UPDATE users SET failed_login_count = :c, last_failed_login_at = :now, locked_until = :locked, updated_at = :now WHERE id = :id');
+            $stmt->execute([
+                ':id' => $userId,
+                ':c' => $count,
+                ':now' => $now->format('Y-m-d H:i:s'),
+                ':locked' => $lockedUntil,
+            ]);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) { $this->pdo->rollBack(); }
+        }
+    }
+
+    public function resetFailedLogins(int $userId): void
+    {
+        $stmt = $this->pdo->prepare('UPDATE users SET failed_login_count = 0, last_failed_login_at = NULL WHERE id = :id');
+        $stmt->execute([':id' => $userId]);
+    }
 }
 
 

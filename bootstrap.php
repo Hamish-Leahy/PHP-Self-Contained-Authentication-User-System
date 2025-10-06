@@ -13,6 +13,8 @@ use AuthKit\Security\Jwt\HsJwtSigner;
 use AuthKit\Mail\PhpMailMailer;
 use AuthKit\Mail\NullMailer;
 use AuthKit\Service\AuthService;
+use AuthKit\Support\Auth\CurrentUser;
+use AuthKit\Support\Config\ConfigValidator;
 
 $__root = __DIR__;
 
@@ -22,6 +24,9 @@ $autoloader = new Autoloader($__root . '/src');
 $autoloader->register();
 
 $config = require $__root . '/config/auth.php';
+
+$validator = new ConfigValidator();
+$validator->validate($config);
 
 $dbConnection = new DatabaseConnection($config['database']);
 
@@ -54,8 +59,10 @@ return [
         $jwt = !empty($config['jwt']['enabled']) ? new HsJwtSigner($config['jwt']) : null;
 
         $auth = new AuthService($userRepo, $tokenRepo, $hasher, $session, $clock, $mailer, $random, $jwt, $config);
+        $currentUser = new CurrentUser($session, $jwt, $userRepo);
         return [
             'auth' => $auth,
+            'current_user' => $currentUser,
         ];
     })(),
 ];
