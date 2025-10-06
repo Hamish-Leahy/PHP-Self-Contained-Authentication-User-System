@@ -13,6 +13,8 @@ interface UserRepositoryInterface
     public function markEmailVerified(int $userId): void;
     public function updatePassword(int $userId, string $newHash, string $passwordAlgo): void;
     public function updateLastLoginAt(int $userId, \DateTimeImmutable $when): void;
+    public function incrementFailedLoginAndMaybeLock(int $userId, \DateTimeImmutable $windowStart, \DateTimeImmutable $now, int $maxAttempts, string $lockDurationSpec): void;
+    public function resetFailedLogins(int $userId): void;
 }
 
 
