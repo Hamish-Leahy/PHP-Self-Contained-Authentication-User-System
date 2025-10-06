@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `password_hash` VARCHAR(255) NOT NULL,
   `password_algo` VARCHAR(32) NOT NULL DEFAULT 'PASSWORD_DEFAULT',
   `is_email_verified` TINYINT(1) NOT NULL DEFAULT 0,
+  `failed_login_count` INT NOT NULL DEFAULT 0,
+  `last_failed_login_at` DATETIME NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL,
   `last_login_at` DATETIME NULL,
