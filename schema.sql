@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `is_email_verified` TINYINT(1) NOT NULL DEFAULT 0,
   `failed_login_count` INT NOT NULL DEFAULT 0,
   `last_failed_login_at` DATETIME NULL,
+  `two_factor_enabled` TINYINT(1) NOT NULL DEFAULT 0,
+  `two_factor_secret` VARCHAR(64) NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL,
   `last_login_at` DATETIME NULL,
@@ -31,6 +33,32 @@ CREATE TABLE IF NOT EXISTS `auth_email_tokens` (
   UNIQUE KEY `uniq_user_token` (`user_id`, `token_type`, `token_hash`),
   KEY `idx_expires` (`expires_at`),
   CONSTRAINT `fk_tokens_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `user_recovery_codes` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `code_hash` CHAR(64) NOT NULL,
+  `used_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_user_code` (`user_id`, `code_hash`),
+  CONSTRAINT `fk_recovery_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `jwt_refresh_tokens` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `token_hash` CHAR(64) NOT NULL,
+  `expires_at` DATETIME NOT NULL,
+  `revoked_at` DATETIME NULL,
+  `replaced_by_id` BIGINT UNSIGNED NULL,
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_refresh_hash` (`token_hash`),
+  KEY `idx_refresh_user` (`user_id`),
+  CONSTRAINT `fk_refresh_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_refresh_replaced` FOREIGN KEY (`replaced_by_id`) REFERENCES `jwt_refresh_tokens` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

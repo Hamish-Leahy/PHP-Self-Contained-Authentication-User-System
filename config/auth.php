@@ -44,6 +44,12 @@ return [
         'algorithm' => 'HS256',
     ],
 
+    'two_factor' => [
+        'issuer' => 'YourApp',
+        'digits' => 6,
+        'period' => 30,
+    ],
+
     'mail' => [
         'driver' => 'php_mail',
         'from' => ['email' => 'no-reply@example.com', 'name' => 'App Auth'],
