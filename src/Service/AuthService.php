@@ -12,6 +12,7 @@ use AuthKit\Contracts\SessionInterface;
 use AuthKit\Contracts\UserRepositoryInterface;
 use AuthKit\Contracts\EmailTokenRepositoryInterface;
 use AuthKit\Domain\Token\EmailTokenType;
+use AuthKit\Contracts\LoggerInterface;
 
 final class AuthService
 {
@@ -24,7 +25,10 @@ final class AuthService
         private readonly MailerInterface $mailer,
         private readonly RandomTokenGeneratorInterface $random,
         private readonly ?JwtSignerInterface $jwt,
-        private readonly array $config
+        private readonly array $config,
+        private readonly ?TwoFactorService $twoFactor = null,
+        private readonly ?RefreshTokenService $refresh = null,
+        private readonly ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -60,6 +64,7 @@ final class AuthService
         $email = strtolower(trim($email));
         $user = $this->users->findByEmail($email);
         if (!$user) {
+            $this->logger?->warning('login_user_not_found', ['email' => $email]);
             throw new \RuntimeException('Invalid credentials');
         }
         // Lockout check
@@ -72,12 +77,19 @@ final class AuthService
             $now = $this->clock->now();
             $windowStart = $now->sub(\DateInterval::createFromDateString($windowSpec));
             $this->users->incrementFailedLoginAndMaybeLock($user->id ?? 0, $windowStart, $now, $max, (string)($this->config['lockout']['lock_duration'] ?? '30 minutes'));
+            $this->logger?->warning('login_failed', ['user_id' => $user->id]);
             throw new \RuntimeException('Invalid credentials');
         }
         if ($this->hasher->needsRehash($user->passwordHash)) {
             $newHash = $this->hasher->hash($password);
             $this->users->updatePassword($user->id ?? 0, $newHash, (string)$this->config['security']['password_algo']);
         }
+        // 2FA challenge
+        if ($user->twoFactorEnabled && $this->twoFactor !== null) {
+            $this->session->set('pending_2fa_user_id', $user->id);
+            return ['requires_2fa' => true];
+        }
+
         $this->session->regenerate();
         $this->session->set('auth_user_id', $user->id);
         $this->users->updateLastLoginAt($user->id ?? 0, $this->clock->now());
@@ -86,8 +98,43 @@ final class AuthService
         $result = ['user_id' => $user->id];
         if ($this->jwt) {
             $result['jwt'] = $this->jwt->sign(['sub' => $user->id]);
+            if ($this->refresh) {
+                $refresh = $this->refresh->issue($user->id ?? 0);
+                $result['refresh_token'] = $refresh['token'];
+            }
+        }
+        $this->logger?->info('login_success', ['user_id' => $user->id]);
+        return $result;
+    }
+
+    public function completeTwoFactor(string $code): array
+    {
+        if (!$this->twoFactor) { throw new \RuntimeException('2FA not supported'); }
+        $userId = (int)($this->session->get('pending_2fa_user_id') ?? 0);
+        if (!$userId) { throw new \RuntimeException('No 2FA pending'); }
+        if (!$this->twoFactor->verifyCodeOrRecovery($userId, $code)) {
+            throw new \RuntimeException('Invalid 2FA code');
+        }
+        $this->session->remove('pending_2fa_user_id');
+        $this->session->regenerate();
+        $this->session->set('auth_user_id', $userId);
+        $result = ['user_id' => $userId];
+        if ($this->jwt) {
+            $result['jwt'] = $this->jwt->sign(['sub' => $userId]);
+            if ($this->refresh) {
+                $refresh = $this->refresh->issue($userId);
+                $result['refresh_token'] = $refresh['token'];
+            }
         }
         return $result;
+    }
+
+    public function refreshJwt(string $refreshToken): array
+    {
+        if (!$this->jwt || !$this->refresh) { throw new \RuntimeException('Refresh not supported'); }
+        $rotated = $this->refresh->rotate($refreshToken);
+        $jwt = $this->jwt->sign(['sub' => $rotated['user_id']]);
+        return ['jwt' => $jwt, 'refresh_token' => $rotated['token']];
     }
 
     // removed direct-PDO fallback; repository handles lockout atomically

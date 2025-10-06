@@ -15,6 +15,13 @@ use AuthKit\Mail\NullMailer;
 use AuthKit\Service\AuthService;
 use AuthKit\Support\Auth\CurrentUser;
 use AuthKit\Support\Config\ConfigValidator;
+use AuthKit\Security\Totp;
+use AuthKit\Repository\PDOTwoFactorRepository;
+use AuthKit\Repository\PDORecoveryCodeRepository;
+use AuthKit\Repository\PDORefreshTokenRepository;
+use AuthKit\Service\TwoFactorService;
+use AuthKit\Service\RefreshTokenService;
+use AuthKit\Support\Logging\NullLogger;
 
 $__root = __DIR__;
 
@@ -58,7 +65,17 @@ return [
         $mailer = ($config['mail']['driver'] ?? 'php_mail') === 'php_mail' ? new PhpMailMailer() : new NullMailer();
         $jwt = !empty($config['jwt']['enabled']) ? new HsJwtSigner($config['jwt']) : null;
 
-        $auth = new AuthService($userRepo, $tokenRepo, $hasher, $session, $clock, $mailer, $random, $jwt, $config);
+        $totp = new Totp((int)($config['two_factor']['digits'] ?? 6), (int)($config['two_factor']['period'] ?? 30));
+        $twoFactorRepo = new PDOTwoFactorRepository($pdo);
+        $recoveryRepo = new PDORecoveryCodeRepository($pdo);
+        $twoFactor = new TwoFactorService($twoFactorRepo, $recoveryRepo, $totp, $random, $clock, $config);
+
+        $refreshRepo = new PDORefreshTokenRepository($pdo);
+        $refresh = new RefreshTokenService($refreshRepo, $random, $clock, $config);
+
+        $logger = new NullLogger();
+
+        $auth = new AuthService($userRepo, $tokenRepo, $hasher, $session, $clock, $mailer, $random, $jwt, $config, $twoFactor, $refresh, $logger);
         $currentUser = new CurrentUser($session, $jwt, $userRepo);
         return [
             'auth' => $auth,

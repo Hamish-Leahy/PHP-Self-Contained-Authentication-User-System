@@ -83,6 +83,8 @@ final class PDOUserRepository implements UserRepositoryInterface
             passwordHash: (string)$row['password_hash'],
             passwordAlgo: (string)$row['password_algo'],
             isEmailVerified: (bool)$row['is_email_verified'],
+            twoFactorEnabled: (bool)($row['two_factor_enabled'] ?? 0),
+            twoFactorSecret: isset($row['two_factor_secret']) ? (string)$row['two_factor_secret'] : null,
             createdAt: $createdAt,
             updatedAt: $updatedAt,
             lastLoginAt: $lastLoginAt,

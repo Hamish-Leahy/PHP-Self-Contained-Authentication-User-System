@@ -11,6 +11,8 @@ final class User
         public readonly string $passwordHash,
         public readonly string $passwordAlgo,
         public readonly bool $isEmailVerified,
+        public readonly bool $twoFactorEnabled,
+        public readonly ?string $twoFactorSecret,
         public readonly \DateTimeImmutable $createdAt,
         public readonly \DateTimeImmutable $updatedAt,
         public readonly ?\DateTimeImmutable $lastLoginAt,
