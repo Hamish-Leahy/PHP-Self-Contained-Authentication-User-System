@@ -20,6 +20,12 @@ return [
         'password_reset_ttl' => '2 hours',
     ],
 
+    'lockout' => [
+        'max_attempts' => 5,
+        'window' => '15 minutes',
+        'lock_duration' => '30 minutes',
+    ],
+
     'session' => [
         'name' => 'AUTHSESSID',
         'cookie_secure' => true,
